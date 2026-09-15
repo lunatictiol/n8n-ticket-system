@@ -1,0 +1,99 @@
+{
+  "name": "Support Ticketing — Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e1000000-0000-4000-8000-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const e = items[0].json;\n\nreturn [{\n  json: {\n    workflow_name: e.workflow?.name || 'unknown',\n    execution_id: String(e.execution?.id || ''),\n    failed_node: e.execution?.lastNodeExecuted || 'unknown',\n    error_message: (e.execution?.error?.message || 'no message').slice(0, 2000),\n    error_stack: (e.execution?.error?.stack || '').slice(0, 4000),\n    payload: JSON.stringify(e).slice(0, 20000)\n  }\n}];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000002",
+      "name": "Shape Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO dead_letter (workflow, payload, error, attempt_count, created_at)\nVALUES ($1, $2::jsonb, $3, 1, NOW());",
+        "options": {
+          "queryReplacement": "={{ [$json.workflow_name, $json.payload, $json.failed_node + ': ' + $json.error_message] }}"
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000003",
+      "name": "Write Dead Letter",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Ticketing Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "bhatsabiq9@gmail.com",
+        "subject": "=[n8n FAILURE] {{ $('Shape Error').item.json.workflow_name }} — {{ $('Shape Error').item.json.failed_node }}",
+        "message": "=<p><b>Workflow:</b> {{ $('Shape Error').item.json.workflow_name }}<br>\n<b>Execution:</b> {{ $('Shape Error').item.json.execution_id }}<br>\n<b>Failed at node:</b> {{ $('Shape Error').item.json.failed_node }}</p>\n\n<h3>Error</h3>\n<pre style=\"white-space:pre-wrap;background:#fdeeee;padding:10px\">{{ $('Shape Error').item.json.error_message }}</pre>\n\n<p>Payload written to <code>dead_letter</code> for replay.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000004",
+      "name": "Notify Operator",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [660, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_GMAIL_CRED_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Error Handler\n\nImport this first, then set it as the **Error Workflow** in the main workflow's settings.\n\nIt catches any node failure, writes the full item payload to `dead_letter` so it can be replayed, and emails you.\n\nWithout this, a failed run just disappears into the executions list.",
+        "height": 260,
+        "width": 380,
+        "color": 4
+      },
+      "id": "e1000000-0000-4000-8000-000000000005",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 20]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Shape Error", "type": "main", "index": 0 }]]
+    },
+    "Shape Error": {
+      "main": [[{ "node": "Write Dead Letter", "type": "main", "index": 0 }]]
+    },
+    "Write Dead Letter": {
+      "main": [[{ "node": "Notify Operator", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "local"
+  },
+  "tags": []
+}

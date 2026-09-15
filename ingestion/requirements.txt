@@ -1,0 +1,3 @@
+# M2 ingestion + knowledge-base generation dependencies.
+requests>=2.31
+fpdf2>=2.8      # used by knowledge-base/generate_pdfs.py

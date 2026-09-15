@@ -46,9 +46,10 @@ health: ## Run health checks against all services (M1)
 	@if [ -f scripts/healthcheck.sh ]; then sh scripts/healthcheck.sh; \
 	else echo ">> scripts/healthcheck.sh not implemented yet (M1)"; fi
 
-ingest: ## Ingest knowledge-base PDFs into Qdrant (M4)
+ingest: ## Ingest knowledge base into Qdrant (M2 seeder; M4 upgrades)
 	@if [ -f ingestion/ingest.py ]; then python -m ingestion.ingest; \
-	else echo ">> ingestion/ingest.py not implemented yet (M4)"; fi
+	elif [ -f ingestion/seed_qdrant.py ]; then python -m ingestion.seed_qdrant; \
+	else echo ">> no ingestion entrypoint yet"; fi
 
 seed: ## Load seed data (roles, demo agents, demo tickets) (M2/M11)
 	@if [ -d db/seed ] && [ -n "$$(ls -A db/seed 2>/dev/null | grep -v .gitkeep)" ]; then \
