@@ -46,6 +46,7 @@ knowledge-base/pdfs/*.pdf
 .claude-flow/
 .claude/settings.local.json
 skills-lock.json
+.serena/
 
 # ---- OS / editor ----
 .DS_Store

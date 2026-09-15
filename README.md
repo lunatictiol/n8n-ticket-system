@@ -29,12 +29,28 @@ each locked decision.
 
 ```sh
 cp .env.example .env    # then fill in the CHANGE_ME_* values
-make up                 # start the stack          (M1+)
+make bootstrap          # start the stack, wait for health, pull Ollama models (M1)
+make health             # verify the M1 acceptance gate
 make ingest             # index the knowledge base (M4+)
 make seed               # load demo data           (M2/M11+)
 ```
 
+`make up` starts the stack without pulling models; use `make bootstrap` on first
+run so `qwen3:8b` and `nomic-embed-text` are present before anything needs them.
 Run `make help` to list all available targets.
+
+### Service endpoints (local)
+
+| Service | URL | Notes |
+|---|---|---|
+| n8n | http://localhost:5678 | basic auth (`N8N_BASIC_AUTH_USER` / `_PASSWORD`) |
+| Supabase Studio | http://localhost:3001 | direct; or via Kong at `:8000` (dashboard basic auth) |
+| Supabase API (Kong) | http://localhost:8000 | REST/Auth/Realtime/Storage gateway |
+| Qdrant | http://localhost:6333 | REST + dashboard at `/dashboard` |
+| Ollama | http://localhost:11434 | `qwen3:8b`, `nomic-embed-text` |
+
+Postgres, GoTrue, PostgREST, Realtime, Storage, imgproxy and postgres-meta are
+internal-only (reachable by other containers via their compose service name).
 
 ## Milestones
 
