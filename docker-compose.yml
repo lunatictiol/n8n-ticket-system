@@ -342,7 +342,7 @@ services:
   # ---------------------------------------------------------------------- n8n
   n8n:
     container_name: n8n
-    image: n8nio/n8n:1.64.3
+    image: n8nio/n8n:1.123.79
     restart: unless-stopped
     ports:
       - "${N8N_PORT:-5678}:5678/tcp"
