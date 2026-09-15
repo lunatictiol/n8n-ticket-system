@@ -1,0 +1,151 @@
+{
+  "name": "Ingest Knowledge Base",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c1000000-0000-4000-8000-000000000001",
+      "name": "When clicking Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-200, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// The three M2 documents and their access levels. The internal_only one is\n// the negative-retrieval test. PDFs are mounted read-only at /data/pdfs in the\n// n8n container (see docker-compose.yml).\nreturn [\n  { json: { filename: 'refund-policy.pdf',         doc_name: 'Refund Policy',        doc_type: 'policy',        access_level: 'customer_safe', version: '1.0' } },\n  { json: { filename: 'product-documentation.pdf', doc_name: 'Product Documentation', doc_type: 'documentation', access_level: 'customer_safe', version: '1.0' } },\n  { json: { filename: 'support-handbook.pdf',      doc_name: 'Support Handbook',      doc_type: 'handbook',      access_level: 'internal_only', version: '1.0' } }\n];"
+      },
+      "id": "c1000000-0000-4000-8000-000000000002",
+      "name": "Files To Ingest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [20, 300]
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/pdfs/{{ $json.filename }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "c1000000-0000-4000-8000-000000000003",
+      "name": "Read PDF",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "company_docs",
+          "mode": "list",
+          "cachedResultName": "company_docs"
+        },
+        "options": {}
+      },
+      "id": "c1000000-0000-4000-8000-000000000004",
+      "name": "Qdrant — Insert",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.1,
+      "position": [560, 300],
+      "credentials": {
+        "qdrantApi": {
+          "id": "REPLACE_QDRANT_CRED_ID",
+          "name": "Qdrant (http://qdrant:6333)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest",
+        "options": {}
+      },
+      "id": "c1000000-0000-4000-8000-000000000005",
+      "name": "Ollama — Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [460, 520],
+      "credentials": {
+        "ollamaApi": {
+          "id": "REPLACE_OLLAMA_CRED_ID",
+          "name": "Ollama (http://ollama:11434)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataType": "binary",
+        "loader": "pdfLoader",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              { "name": "doc_name",     "value": "={{ $('Files To Ingest').item.json.doc_name }}" },
+              { "name": "doc_type",     "value": "={{ $('Files To Ingest').item.json.doc_type }}" },
+              { "name": "access_level", "value": "={{ $('Files To Ingest').item.json.access_level }}" },
+              { "name": "version",      "value": "={{ $('Files To Ingest').item.json.version }}" }
+            ]
+          }
+        }
+      },
+      "id": "c1000000-0000-4000-8000-000000000006",
+      "name": "Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1,
+      "position": [660, 520]
+    },
+    {
+      "parameters": {
+        "chunkSize": 600,
+        "chunkOverlap": 80,
+        "options": {}
+      },
+      "id": "c1000000-0000-4000-8000-000000000007",
+      "name": "Recursive Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [820, 700]
+    },
+    {
+      "parameters": {
+        "content": "## Ingest Knowledge Base (M2 basic path)\n\nManual-trigger ingestion, matching the locked decision that ingestion runs in n8n.\n\n**Before running:**\n- Re-select the Qdrant and Ollama credentials on the two nodes marked REPLACE_.\n- The PDFs are read from `/data/pdfs` inside the container — the repo's `knowledge-base/pdfs` is mounted there read-only in docker-compose.yml.\n\nEach file's `access_level` is attached as document metadata, so retrieval's `metadata.access_level = customer_safe` filter works. `support-handbook.pdf` is tagged `internal_only` on purpose (the negative test).\n\nM3 hardens this: heading-aware chunking, name+section prepend, file_hash skip, and a `knowledge_documents` row per document.",
+        "height": 320,
+        "width": 420,
+        "color": 4
+      },
+      "id": "c1000000-0000-4000-8000-000000000008",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-220, -40]
+    }
+  ],
+  "connections": {
+    "When clicking Test": {
+      "main": [[{ "node": "Files To Ingest", "type": "main", "index": 0 }]]
+    },
+    "Files To Ingest": {
+      "main": [[{ "node": "Read PDF", "type": "main", "index": 0 }]]
+    },
+    "Read PDF": {
+      "main": [[{ "node": "Qdrant — Insert", "type": "main", "index": 0 }]]
+    },
+    "Ollama — Embeddings": {
+      "ai_embedding": [[{ "node": "Qdrant — Insert", "type": "ai_embedding", "index": 0 }]]
+    },
+    "Default Data Loader": {
+      "ai_document": [[{ "node": "Qdrant — Insert", "type": "ai_document", "index": 0 }]]
+    },
+    "Recursive Splitter": {
+      "ai_textSplitter": [[{ "node": "Default Data Loader", "type": "ai_textSplitter", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "local"
+  },
+  "tags": []
+}

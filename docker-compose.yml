@@ -374,6 +374,8 @@ services:
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-UTC}
     volumes:
       - n8n-data:/home/node/.n8n
+      # Knowledge-base PDFs, read-only, for the Ingest Knowledge Base workflow (M2.2).
+      - ./knowledge-base/pdfs:/data/pdfs:ro
     networks: [ticketnet]
 
 networks:
