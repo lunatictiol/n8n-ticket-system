@@ -97,3 +97,65 @@ invocation; repo contains no secrets. — see verification below.
   via one-off `N8N_PORT`/`KONG_HTTP_PORT` overrides. The committed compose still
   binds 5678/8000; stop the conflicting processes (or override the ports) to run
   on the defaults.
+
+## M2 — Attached workflows running green — 🟡 deterministic parts complete (2026-09-15)
+
+Building against `milestones-v2.md` (n8n-first re-ordering). Everything that can
+be built and verified without a real mailbox is done and checked; the remaining
+steps (Gmail OAuth, importing in the UI, sending real mail) are interactive and
+documented in `docs/m2-bringup.md`.
+
+**Shipped & verified:**
+- **M2.1 minimal schema** — `db/migrations/001_m2_minimal_schema.sql`: `tickets`,
+  `ticket_messages` (`provider_message_id` UNIQUE), `replies`, `ticket_events`,
+  `audit_log`, `dead_letter`. `ticket_number` defaults from a per-year sequence
+  via `next_ticket_number()`. Applied to a fresh DB; verified it emits
+  `TKT-2026-00001`, `00002`.
+- **M2.4 workflow fixes** (the six known breakages):
+  1. **Comma-split params** — every `queryReplacement` switched from a
+     comma-joined string to an array expression `={{ [a, b, c] }}`, so a comma in
+     a subject/body no longer shifts parameters.
+  2. **Empty-result branch** — `Check Duplicate` already had `alwaysOutputData`
+     (verified); the false branch now fires for new messages.
+  3. **qwen3 `<think>`** — `/no_think` prepended to the classifier and drafting
+     system prompts.
+  4. **Retrieval score** — `Build Context` hardened to read the score from any of
+     `item.json.score`, `document.score`, `metadata.score`, `metadata._score`.
+     Confirmed the score is present in the raw Qdrant search response (0.78 on a
+     refund query). One-time UI confirmation of where the n8n node surfaces it is
+     in the runbook.
+  5. **Multi-statement parameterised queries** — moved into Postgres functions
+     (`db/migrations/002_m2_workflow_helpers.sql`: `mark_needs_manual`,
+     `record_sent_audit`, `record_rejection`); the three nodes now run a single
+     `SELECT fn($1,…)`. Functions smoke-tested (correct statuses/events/audit).
+  6. **Classifier `discard` fallback** — left as intended; documented.
+  - `dead_letter` `ON CONFLICT DO NOTHING` (no unique key behind it) dropped from
+    the error handler.
+- **M2.2 knowledge base** — three PDFs generated reproducibly from a single source
+  (`knowledge-base/documents.py` → `generate_pdfs.py`): Refund Policy and Product
+  Documentation (`customer_safe`), Support Handbook (`internal_only`, the negative
+  test). Qdrant `company_docs` (768-dim cosine) seeded via
+  `ingestion/seed_qdrant.py` — 11 points, payload shape matches the langchain
+  retrieve node (`content` + `metadata.access_level`). Retrieval verified: refund
+  query tops at 0.78 on the right doc; the `customer_safe` filter returns zero
+  `internal_only` chunks while the handbook is still in the corpus unfiltered.
+- **M2.3 wiring** — the n8n ingestion workflow
+  (`wf-ingest-knowledge-base.json`), a read-only `./knowledge-base/pdfs:/data/pdfs`
+  mount on the n8n service, `WEBHOOK_URL`/`N8N_PORT` aligned to the live 15678
+  port, and agent-email placeholders pre-filled. Credential/import checklist and
+  the M2.5 acceptance checklist are in `docs/m2-bringup.md`.
+
+**Deviations from `milestones-v2.md` (with reason):**
+- **M2.2 ingestion done via a Python seeder for bring-up**, not the n8n workflow.
+  Reason: the seeder is headlessly verifiable (embeds via Ollama, upserts to
+  Qdrant, checks retrieval) and produces the exact payload the retrieve node
+  reads. The locked-decision n8n ingestion workflow is still delivered
+  (`wf-ingest-knowledge-base.json`) and is the path M3 hardens; the plan itself
+  scopes "upgrade the ingestion workflow" to M3.
+- **Agent email pre-filled to `bhatsabiq9@gmail.com`** (the project owner) instead
+  of a placeholder, so the workflow runs out of the box for a solo local setup.
+  Change it per `docs/m2-bringup.md` if a different approver is used.
+
+**Not done in M2 (interactive — see `docs/m2-bringup.md`):** Gmail OAuth2
+credential, importing the three workflows in the UI, setting the error workflow,
+and the M2.5 send/approve/reject round trip against a real inbox.
